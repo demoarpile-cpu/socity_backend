@@ -182,8 +182,11 @@ class VendorController {
           OR: [
             { servicePincodes: { equals: pin } },
             { servicePincodes: { startsWith: pin + ',' } },
+            { servicePincodes: { endsWith: ' ' + pin } },
             { servicePincodes: { endsWith: ',' + pin } },
-            { servicePincodes: { contains: ',' + pin + ',' } }
+            { servicePincodes: { contains: ' ' + pin + ',' } },
+            { servicePincodes: { contains: ',' + pin + ',' } },
+            { servicePincodes: { contains: pin } }
           ]
         };
         if (Object.keys(where).length > 0) {

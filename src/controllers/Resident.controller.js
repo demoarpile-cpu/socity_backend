@@ -53,16 +53,34 @@ class ResidentController {
                 }
             }) : 0;
 
-            // 4. Announcements (Notices) – audience by owner/tenant, not role
+            // 4. Announcements (Notices)
             const announcements = await prisma.notice.findMany({
                 where: {
                     societyId,
-                    OR: [
-                        { audience: 'ALL' },
-                        { audience: isOwner ? 'OWNERS' : 'TENANTS' }
+                    status: 'PUBLISHED',
+                    startDate: { 
+                      lte: new Date(new Date().getTime() + 60000) 
+                    },
+                    AND: [
+                      {
+                        OR: [
+                            { audience: 'ALL' },
+                            { audience: 'RESIDENTS' },
+                            { audience: isOwner ? 'OWNERS' : 'TENANTS' }
+                        ]
+                      },
+                      {
+                        OR: [
+                          { expiresAt: null },
+                          { expiresAt: { gt: new Date() } }
+                        ]
+                      }
                     ]
                 },
-                orderBy: { createdAt: 'desc' },
+                orderBy: [
+                    { isPinned: 'desc' },
+                    { createdAt: 'desc' }
+                ],
                 take: 5
             });
 

@@ -7,9 +7,38 @@ class NoticeController {
       if (req.user.role !== 'SUPER_ADMIN') {
         where.societyId = req.user.societyId;
       }
+
+      // Filter for non-admin users (Residents, Guards, etc.)
+      if (!['ADMIN', 'SUPER_ADMIN', 'COMMUNITY_MANAGER'].includes(req.user.role)) {
+        where.AND = [
+          { status: 'PUBLISHED' },
+          {
+            startDate: {
+              lte: new Date(new Date().getTime() + 60000) // 1 minute buffer for immediate visibility
+            }
+          },
+          {
+            OR: [
+              { audience: 'ALL' },
+              { audience: 'RESIDENTS' },
+              { audience: req.user.role }
+            ]
+          },
+          {
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: new Date() } }
+            ]
+          }
+        ];
+      }
+
       const notices = await prisma.notice.findMany({
         where,
-        orderBy: { createdAt: 'desc' }
+        orderBy: [
+          { isPinned: 'desc' },
+          { createdAt: 'desc' }
+        ]
       });
       res.json(notices);
     } catch (error) {
@@ -19,13 +48,23 @@ class NoticeController {
 
   static async create(req, res) {
     try {
-      const { title, content, audience, societyId, expiresAt } = req.body;
+      const { title, content, audience, type, priority, status, isPinned, startDate, expiresAt } = req.body;
+
+      // Handle empty or invalid dates
+      let sDate = startDate ? new Date(startDate) : new Date();
+      if (sDate.toString() === 'Invalid Date') sDate = new Date();
+
       const notice = await prisma.notice.create({
         data: {
           title,
           content,
-          audience,
-          societyId: parseInt(societyId || req.user.societyId),
+          audience: audience || 'ALL',
+          type: type || 'announcement',
+          priority: priority || 'medium',
+          status: status || 'PUBLISHED',
+          isPinned: isPinned === true || isPinned === 'true',
+          societyId: req.user.societyId,
+          startDate: sDate,
           expiresAt: expiresAt ? new Date(expiresAt) : null
         }
       });

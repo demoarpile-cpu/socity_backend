@@ -710,15 +710,37 @@ model Notice {
   id       Int    @id @default(autoincrement())
   title    String
   content  String @db.Text
-  audience String // ALL, OWNERS, TENANTS
+  audience String // ALL, RESIDENTS, OWNERS, TENANTS
+  type     String @default("announcement") // announcement, maintenance, event, emergency
+  priority String @default("medium") // low, medium, high
+  status   String @default("PUBLISHED") // DRAFT, PUBLISHED
+  isPinned Boolean @default(false)
+  viewsCount Int     @default(0)
 
   societyId Int
   society   Society @relation(fields: [societyId], references: [id])
 
+  views     NoticeView[]
+
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  startDate DateTime  @default(now())
   expiresAt DateTime?
 
   @@map("notice")
+}
+
+model NoticeView {
+  id        Int      @id @default(autoincrement())
+  noticeId  Int
+  userId    Int
+  viewedAt  DateTime @default(now())
+
+  notice    Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noticeId, userId])
+  @@map("notice_view")
 }
 
 model Amenity {
