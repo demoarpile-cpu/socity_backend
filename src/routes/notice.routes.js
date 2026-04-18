@@ -17,5 +17,11 @@ router.patch('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), NoticeController.updat
 // Delete notice
 router.delete('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), NoticeController.delete);
 
+// View tracking
+router.post('/:id/view', NoticeController.trackView);
+
+// Get viewer list (Admin only)
+router.get('/:id/viewers', authorize(['ADMIN', 'SUPER_ADMIN']), NoticeController.getViewers);
+
 module.exports = router;
 

@@ -3,43 +3,52 @@ const prisma = require('../lib/prisma');
 class NoticeController {
   static async list(req, res) {
     try {
-      const where = {};
-      if (req.user.role !== 'SUPER_ADMIN') {
-        where.societyId = req.user.societyId;
-      }
+      const userRole = req.user.role.toUpperCase();
+      const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'COMMUNITY_MANAGER'].includes(userRole);
+      
+      const societyId = userRole !== 'SUPER_ADMIN' ? req.user.societyId : undefined;
+      
+      const where = {
+        societyId,
+        status: 'PUBLISHED'
+      };
 
-      // Filter for non-admin users (Residents, Guards, etc.)
-      if (!['ADMIN', 'SUPER_ADMIN', 'COMMUNITY_MANAGER'].includes(req.user.role)) {
-        where.AND = [
-          { status: 'PUBLISHED' },
-          {
-            startDate: {
-              lte: new Date(new Date().getTime() + 60000) // 1 minute buffer for immediate visibility
-            }
-          },
-          {
-            OR: [
-              { audience: 'ALL' },
-              { audience: 'RESIDENTS' },
-              { audience: req.user.role }
-            ]
-          },
-          {
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } }
-            ]
-          }
+      let allowedAudiences = ['ALL'];
+      if (!isAdmin) {
+        if (userRole === 'RESIDENT' || userRole === 'TENANT' || userRole === 'OWNER') {
+          allowedAudiences.push('RESIDENTS');
+        } else if (userRole === 'GUARD') {
+          allowedAudiences.push('GUARD');
+        } else {
+          allowedAudiences.push(userRole);
+        }
+
+        where.audience = { in: allowedAudiences };
+        where.startDate = { lte: new Date() };
+        where.OR = [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } }
         ];
       }
 
-      const notices = await prisma.notice.findMany({
+      const fs = require('fs');
+      try {
+        fs.appendFileSync('notice_query_debug.log', `[${new Date().toISOString()}] User: ${req.user.email}, Role: ${userRole}, Allowed: ${JSON.stringify(allowedAudiences)}\n`);
+      } catch(e) {}
+
+      let notices = await prisma.notice.findMany({
         where,
         orderBy: [
           { isPinned: 'desc' },
           { createdAt: 'desc' }
         ]
       });
+
+      // Secondary Failsafe: Filter in JavaScript to be 100% sure
+      if (!isAdmin) {
+        notices = notices.filter(n => allowedAudiences.includes(n.audience));
+      }
+
       res.json(notices);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -102,6 +111,69 @@ class NoticeController {
       }
       await prisma.notice.delete({ where: { id: parseInt(id) } });
       res.json({ message: 'Notice deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async trackView(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      await prisma.noticeView.upsert({
+        where: {
+          noticeId_userId: {
+            noticeId: parseInt(id),
+            userId: userId
+          }
+        },
+        update: { viewedAt: new Date() },
+        create: {
+          noticeId: parseInt(id),
+          userId: userId
+        }
+      });
+
+      // Update total views count in notice
+      const count = await prisma.noticeView.count({
+        where: { noticeId: parseInt(id) }
+      });
+
+      await prisma.notice.update({
+        where: { id: parseInt(id) },
+        data: { viewsCount: count }
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async getViewers(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const views = await prisma.noticeView.findMany({
+        where: { noticeId: parseInt(id) },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              profileImg: true
+            }
+          }
+        },
+        orderBy: { viewedAt: 'desc' }
+      });
+
+      res.json(views.map(v => ({
+        ...v.user,
+        viewedAt: v.viewedAt
+      })));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

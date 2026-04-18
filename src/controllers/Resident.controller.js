@@ -54,27 +54,30 @@ class ResidentController {
             }) : 0;
 
             // 4. Announcements (Notices)
-            const announcements = await prisma.notice.findMany({
+            const userRole = req.user.role?.toUpperCase();
+            const allowedAudiences = ['ALL'];
+            
+            if (userRole === 'RESIDENT' || userRole === 'TENANT' || userRole === 'OWNER') {
+              allowedAudiences.push('RESIDENTS');
+            }
+            if (userRole === 'OWNER') {
+              allowedAudiences.push('OWNERS');
+            }
+            if (userRole === 'TENANT') {
+              allowedAudiences.push('TENANTS');
+            }
+
+            let announcements = await prisma.notice.findMany({
                 where: {
                     societyId,
                     status: 'PUBLISHED',
                     startDate: { 
                       lte: new Date(new Date().getTime() + 60000) 
                     },
-                    AND: [
-                      {
-                        OR: [
-                            { audience: 'ALL' },
-                            { audience: 'RESIDENTS' },
-                            { audience: isOwner ? 'OWNERS' : 'TENANTS' }
-                        ]
-                      },
-                      {
-                        OR: [
-                          { expiresAt: null },
-                          { expiresAt: { gt: new Date() } }
-                        ]
-                      }
+                    audience: { in: allowedAudiences },
+                    OR: [
+                      { expiresAt: null },
+                      { expiresAt: { gt: new Date() } }
                     ]
                 },
                 orderBy: [
@@ -83,6 +86,9 @@ class ResidentController {
                 ],
                 take: 5
             });
+
+            // Secondary Failsafe
+            announcements = announcements.filter(a => allowedAudiences.includes(a.audience));
 
             // 5. Community Buzz
             const buzz = await prisma.communityBuzz.findMany({
