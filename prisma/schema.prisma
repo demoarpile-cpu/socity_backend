@@ -220,6 +220,7 @@ model User {
   groupMemberships  GroupMember[]
   groupMessages     GroupMessage[]
   notifications     Notification[]
+  noticeViews       NoticeView[]
 
   @@map("user")
 }
