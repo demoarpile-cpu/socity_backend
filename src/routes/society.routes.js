@@ -24,10 +24,10 @@ router.post('/:id/pay', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), Socie
 
 // Guidelines: for-me is for any authenticated user (Admin/Resident/Individual/Vendor)
 router.get('/guidelines/for-me', authenticate, SocietyController.getGuidelinesForMe);
-// Guidelines Management (Super Admin)
-router.get('/guidelines', authenticate, authorize(['SUPER_ADMIN']), SocietyController.getGuidelines);
-router.post('/guidelines', authenticate, authorize(['SUPER_ADMIN']), SocietyController.createGuideline);
-router.put('/guidelines/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.updateGuideline);
-router.delete('/guidelines/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.deleteGuideline);
+// Guidelines Management (Super Admin \u0026 Society Admin)
+router.get('/guidelines', authenticate, authorize(['SUPER_ADMIN', 'ADMIN']), SocietyController.getGuidelines);
+router.post('/guidelines', authenticate, authorize(['SUPER_ADMIN', 'ADMIN']), SocietyController.createGuideline);
+router.put('/guidelines/:id', authenticate, authorize(['SUPER_ADMIN', 'ADMIN']), SocietyController.updateGuideline);
+router.delete('/guidelines/:id', authenticate, authorize(['SUPER_ADMIN', 'ADMIN']), SocietyController.deleteGuideline);
 
 module.exports = router;

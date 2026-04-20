@@ -519,7 +519,7 @@ class SocietyController {
         state,
         pincode,
         code,
-        status: 'ACTIVE', // Changed from 'PENDING' to 'ACTIVE' as per instruction
+        status: 'PENDING',
         subscriptionPlan,
         expectedUnits: parseInt(units) || 0,
         createdByUserId: req.user?.id ?? null,
@@ -655,6 +655,8 @@ class SocietyController {
         await tx.society.delete({
           where: { id: societyId }
         });
+      }, {
+        timeout: 60000 // Extended timeout to allow all cascading deletes to finish
       });
 
       res.json({ message: 'Society and all related data deleted successfully' });
@@ -976,7 +978,18 @@ class SocietyController {
       // However, for Society Admin (who sends their ID), we want THEIR guidelines + GLOBAL guidelines.
 
       let where = {};
-      if (societyId) {
+      
+      // If user is ADMIN, they can only see guidelines for their society or global ones.
+      // If user is SUPER_ADMIN, they can see everything or filter by societyId.
+      if (req.user.role === 'ADMIN') {
+        const adminSocietyId = req.user.societyId;
+        where = {
+          OR: [
+            { societyId: adminSocietyId },
+            { societyId: null }
+          ]
+        };
+      } else if (societyId) {
         where = {
           OR: [
             { societyId: parseInt(societyId) },
@@ -1014,7 +1027,8 @@ class SocietyController {
         RESIDENT: ['ALL', 'RESIDENTS'],
         INDIVIDUAL: ['ALL', 'INDIVIDUALS'],
         VENDOR: ['ALL', 'VENDORS'],
-        SUPER_ADMIN: ['ALL', 'ADMINS', 'RESIDENTS', 'INDIVIDUALS', 'VENDORS'],
+        GUARD: ['ALL', 'GUARDS'],
+        SUPER_ADMIN: ['ALL', 'ADMINS', 'RESIDENTS', 'INDIVIDUALS', 'VENDORS', 'GUARDS'],
       };
       const allowedAudiences = audienceForRole[role] || ['ALL'];
 
@@ -1023,7 +1037,7 @@ class SocietyController {
 
       let where = { OR: audienceOrNull };
 
-      if (role === 'ADMIN' || role === 'RESIDENT') {
+      if (role === 'ADMIN' || role === 'RESIDENT' || role === 'GUARD') {
         where = {
           AND: [
             { OR: societyId != null ? [{ societyId }, { societyId: null }] : [{ societyId: null }] },
@@ -1065,13 +1079,21 @@ class SocietyController {
       }
 
       const audience = (targetAudience || 'ALL').toUpperCase();
+      const validAudiences = ['ALL', 'RESIDENTS', 'ADMINS', 'INDIVIDUALS', 'VENDORS', 'GUARDS'];
+      
+      // If user is ADMIN, force societyId to their own
+      let finalSocietyId = societyId ? parseInt(societyId) : null;
+      if (req.user.role === 'ADMIN') {
+        finalSocietyId = req.user.societyId;
+      }
+
       const guideline = await prisma.communityGuideline.create({
         data: {
-          societyId: societyId ? parseInt(societyId) : null,
+          societyId: finalSocietyId,
           title,
           content,
           category: category.toUpperCase(),
-          targetAudience: ['ALL', 'RESIDENTS', 'ADMINS', 'INDIVIDUALS', 'VENDORS'].includes(audience) ? audience : 'ALL'
+          targetAudience: validAudiences.includes(audience) ? audience : 'ALL'
         },
         include: {
           society: {
@@ -1092,9 +1114,21 @@ class SocietyController {
       const { title, content, category, targetAudience } = req.body;
 
       const data = { title, content, category: (category || '').toUpperCase() };
+      const validAudiences = ['ALL', 'RESIDENTS', 'ADMINS', 'INDIVIDUALS', 'VENDORS', 'GUARDS'];
+
       if (targetAudience != null) {
         const a = (targetAudience || 'ALL').toUpperCase();
-        data.targetAudience = ['ALL', 'RESIDENTS', 'ADMINS', 'INDIVIDUALS', 'VENDORS'].includes(a) ? a : 'ALL';
+        data.targetAudience = validAudiences.includes(a) ? a : 'ALL';
+      }
+
+      // If user is ADMIN, check if they own this guideline
+      if (req.user.role === 'ADMIN') {
+        const existing = await prisma.communityGuideline.findUnique({
+          where: { id: parseInt(id) }
+        });
+        if (!existing || existing.societyId !== req.user.societyId) {
+          return res.status(403).json({ error: 'Access denied: not your society\'s guideline' });
+        }
       }
 
       const guideline = await prisma.communityGuideline.update({
@@ -1116,9 +1150,20 @@ class SocietyController {
   static async deleteGuideline(req, res) {
     try {
       const { id } = req.params;
+      const guidelineId = parseInt(id);
+
+      // If user is ADMIN, check if they own this guideline
+      if (req.user.role === 'ADMIN') {
+        const existing = await prisma.communityGuideline.findUnique({
+          where: { id: guidelineId }
+        });
+        if (!existing || existing.societyId !== req.user.societyId) {
+          return res.status(403).json({ error: 'Access denied: not your society\'s guideline' });
+        }
+      }
 
       await prisma.communityGuideline.delete({
-        where: { id: parseInt(id) }
+        where: { id: guidelineId }
       });
 
       res.json({ message: 'Guideline deleted successfully' });
