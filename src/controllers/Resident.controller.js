@@ -677,7 +677,14 @@ class ResidentController {
             const where = { societyId };
 
             // Visibility Logic
-            if (role === 'RESIDENT') {
+            if (role === 'SUPER_ADMIN') {
+                delete where.societyId;
+                // Super Admins see public tickets OR admin-escalated complaints
+                where.OR = [
+                    { isPrivate: false },
+                    { escalatedToSuperAdmin: true }
+                ];
+            } else if (role === 'RESIDENT') {
                 where.reportedById = userId;
             } else if (role === 'ADMIN' || role === 'COMMITTEE') {
                 // Admins/Committee see all public tickets, 
@@ -687,12 +694,6 @@ class ResidentController {
                     { isPrivate: false },
                     { assignedToId: userId },
                     { reportedById: userId }
-                ];
-            } else if (role === 'SUPER_ADMIN') {
-                // Super Admins see public tickets OR admin-escalated complaints
-                where.OR = [
-                    { isPrivate: false },
-                    { escalatedToSuperAdmin: true }
                 ];
             }
 
