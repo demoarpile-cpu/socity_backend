@@ -603,60 +603,92 @@ class SocietyController {
       const societyId = parseInt(id);
 
       await prisma.$transaction(async (tx) => {
-        // 1. Delete platform invoices
-        await tx.platformInvoice.deleteMany({ where: { societyId } });
+        const societyIdWhere = { societyId };
 
-        // 2. Delete related complaints (and comments)
-        const complaintIds = (await tx.complaint.findMany({
-          where: { societyId },
-          select: { id: true }
-        })).map(c => c.id);
+        // 1. Finance & Billing
+        await tx.platformInvoice.deleteMany({ where: societyIdWhere });
+        await tx.journalLine.deleteMany({ where: { account: societyIdWhere } });
+        await tx.journalEntry.deleteMany({ where: societyIdWhere });
+        await tx.ledgerAccount.deleteMany({ where: societyIdWhere });
+        await tx.invoiceItem.deleteMany({ where: { invoice: { societyId } } });
+        await tx.invoice.deleteMany({ where: societyIdWhere });
+        await tx.transaction.deleteMany({ where: societyIdWhere });
+        await tx.parkingPayment.deleteMany({ where: societyIdWhere });
 
+        // 2. Units & Residents Management
+        await tx.unitVehicle.deleteMany({ where: societyIdWhere });
+        await tx.unitPet.deleteMany({ where: { unit: { societyId } } });
+        await tx.unitMember.deleteMany({ where: { unit: { societyId } } });
+        await tx.moveRequest.deleteMany({ where: societyIdWhere });
+        await tx.parcel.deleteMany({ where: societyIdWhere });
+        await tx.visitor.deleteMany({ where: societyIdWhere });
+        await tx.parkingSlot.deleteMany({ where: societyIdWhere });
+        await tx.unit.deleteMany({ where: societyIdWhere });
+
+        // 3. Vendors & Purchases
+        await tx.vendorInvoice.deleteMany({ where: societyIdWhere });
+        await tx.goodsReceipt.deleteMany({ where: societyIdWhere });
+        await tx.purchaseOrder.deleteMany({ where: societyIdWhere });
+        await tx.purchaseRequest.deleteMany({ where: societyIdWhere });
+        await tx.vendorPayout.deleteMany({ where: { societyId } }).catch(()=>null); // Optional table
+        await tx.vendor.deleteMany({ where: societyIdWhere });
+
+        // 4. Amenities & Assets
+        await tx.amenityBooking.deleteMany({ where: { amenity: { societyId } } });
+        await tx.amenity.deleteMany({ where: societyIdWhere });
+        await tx.asset.deleteMany({ where: societyIdWhere });
+        await tx.facilityRequest.deleteMany({ where: societyIdWhere });
+
+        // 5. Communications & Social
+        const complaintIds = (await tx.complaint.findMany({ where: societyIdWhere, select: { id: true } })).map(c => c.id);
         await tx.complaintComment.deleteMany({ where: { complaintId: { in: complaintIds } } });
-        await tx.complaint.deleteMany({ where: { societyId } });
+        await tx.complaint.deleteMany({ where: societyIdWhere });
 
-        // 3. Delete visitors
-        await tx.visitor.deleteMany({ where: { societyId } });
+        await tx.noticeView.deleteMany({ where: { notice: { societyId } } });
+        await tx.notice.deleteMany({ where: societyIdWhere });
+        await tx.meeting.deleteMany({ where: societyIdWhere });
+        await tx.document.deleteMany({ where: societyIdWhere });
+        await tx.eventRsvp.deleteMany({ where: { event: { societyId } } });
+        await tx.event.deleteMany({ where: societyIdWhere });
+        await tx.communityGuideline.deleteMany({ where: societyIdWhere });
 
-        // 4. Delete transactions
-        await tx.transaction.deleteMany({ where: { societyId } });
+        await tx.chatMessage.deleteMany({ where: { conversation: { societyId } } });
+        await tx.conversation.deleteMany({ where: societyIdWhere });
+        await tx.groupMessage.deleteMany({ where: { group: { societyId } } });
+        await tx.groupMember.deleteMany({ where: { group: { societyId } } });
+        await tx.chatGroup.deleteMany({ where: societyIdWhere });
+        await tx.communityChat.deleteMany({ where: societyIdWhere });
 
-        // 5. Delete notices
-        await tx.notice.deleteMany({ where: { societyId } });
+        await tx.communityComment.deleteMany({ where: { buzz: { societyId } } });
+        await tx.buzzLike.deleteMany({ where: { buzz: { societyId } } });
+        await tx.communityBuzz.deleteMany({ where: societyIdWhere });
+        await tx.marketplaceItem.deleteMany({ where: societyIdWhere });
 
-        // 6. Delete Amenity bookings and Amenities
-        const amenityIds = (await tx.amenity.findMany({
-          where: { societyId },
-          select: { id: true }
-        })).map(a => a.id);
+        // 6. Security, Emergency & Staff
+        await tx.incident.deleteMany({ where: societyIdWhere });
+        await tx.patrolLog.deleteMany({ where: societyIdWhere });
+        await tx.staff.deleteMany({ where: societyIdWhere });
+        await tx.emergencyAlert.deleteMany({ where: societyIdWhere });
+        await tx.emergencyContact.deleteMany({ where: societyIdWhere });
+        await tx.emergencyLog.deleteMany({ where: societyIdWhere });
+        await tx.emergencyBarcode.deleteMany({ where: societyIdWhere });
+        await tx.sOSAlert.deleteMany({ where: societyIdWhere });
 
-        await tx.amenityBooking.deleteMany({ where: { amenityId: { in: amenityIds } } });
-        await tx.amenity.deleteMany({ where: { societyId } });
+        // 7. Services
+        await tx.serviceInquiry.deleteMany({ where: societyIdWhere });
 
-        // 7. Delete parking slots
-        await tx.parkingSlot.deleteMany({ where: { societyId } });
+        // 8. Users Cleanup
+        const userIds = (await tx.user.findMany({ where: societyIdWhere, select: { id: true } })).map(u => u.id);
+        if (userIds.length > 0) {
+          await tx.notification.deleteMany({ where: { userId: { in: userIds } } });
+          await tx.userSession.deleteMany({ where: { userId: { in: userIds } } });
+        }
+        await tx.user.deleteMany({ where: societyIdWhere });
 
-        // 8. Delete units
-        await tx.unit.deleteMany({ where: { societyId } });
-
-        // 9. Unlink or delete vendors
-        await tx.vendor.deleteMany({ where: { societyId } });
-
-        // 10. Delete User sessions and Users
-        const userIds = (await tx.user.findMany({
-          where: { societyId },
-          select: { id: true }
-        })).map(u => u.id);
-
-        await tx.userSession.deleteMany({ where: { userId: { in: userIds } } });
-        await tx.user.deleteMany({ where: { societyId } });
-
-        // 11. Finally delete the society
-        await tx.society.delete({
-          where: { id: societyId }
-        });
+        // 9. Finally delete the society
+        await tx.society.delete({ where: { id: societyId } });
       }, {
-        timeout: 60000 // Extended timeout to allow all cascading deletes to finish
+        timeout: 100000 // Extended timeout to allow all cascading deletes to finish
       });
 
       res.json({ message: 'Society and all related data deleted successfully' });
