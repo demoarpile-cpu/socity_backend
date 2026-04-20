@@ -40,3 +40,4 @@
 [2026-04-20T06:15:06.826Z] User: guard@society.com, Role: GUARD, Allowed: ["ALL","GUARD"]
 [2026-04-20T06:15:20.893Z] User: test4@gmail.com, Role: VENDOR, Allowed: ["ALL","VENDOR"]
 [2026-04-20T07:30:31.607Z] User: resident1@society.com, Role: RESIDENT, Allowed: ["ALL","RESIDENTS"]
+[2026-04-20T12:14:55.465Z] User: resident1@society.com, Role: RESIDENT, Allowed: ["ALL","RESIDENTS"]
